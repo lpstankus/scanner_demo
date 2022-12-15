@@ -92,6 +92,8 @@ impl Camera {
 #[repr(C)]
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct CameraUniform {
+    pos: [f32; 3],
+    padding: f32,
     to_view: [[f32; 4]; 4],
     to_clip: [[f32; 4]; 4],
 }
@@ -99,12 +101,15 @@ pub struct CameraUniform {
 impl CameraUniform {
     pub fn new(camera: &Camera) -> Self {
         Self {
+            pos: camera.pos.into(),
+            padding: 0.0,
             to_view: camera.view_matrix().to_cols_array_2d(),
             to_clip: camera.projection_matrix().to_cols_array_2d(),
         }
     }
 
     pub fn update_view_proj(&mut self, camera: &Camera) {
+        self.pos = camera.pos.into();
         self.to_view = camera.view_matrix().to_cols_array_2d();
         self.to_clip = camera.projection_matrix().to_cols_array_2d();
     }
