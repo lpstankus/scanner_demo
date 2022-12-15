@@ -53,10 +53,13 @@ impl Camera {
         }
     }
 
-    pub fn build_view_projection_matrix(&self) -> Mat4 {
-        let view = Mat4::look_to_rh(self.pos, self.dir, self.up);
+    fn view_matrix(&self) -> Mat4 {
+        Mat4::look_to_rh(self.pos, self.dir, self.up)
+    }
+
+    fn projection_matrix(&self) -> Mat4 {
         let proj = Mat4::perspective_rh(self.fovy, self.aspect, self.znear, self.zfar);
-        return TO_WGPU_MATRIX * proj * view;
+        return TO_WGPU_MATRIX * proj;
     }
 
     pub fn update(&mut self, dt: f64) {
@@ -67,9 +70,9 @@ impl Camera {
         let mut movement_dir = Vec3::splat(0.0);
         self.mov.forward.then(|| movement_dir += self.dir);
         self.mov.backward.then(|| movement_dir -= self.dir);
-        self.mov.right.then(|| movement_dir += Vec3::cross(self.dir, self.up));
-        self.mov.left.then(|| movement_dir -= Vec3::cross(self.dir, self.up));
-        movement_dir
+        self.mov.right.then(|| movement_dir += Vec3::cross(self.dir, self.up).normalize());
+        self.mov.left.then(|| movement_dir -= Vec3::cross(self.dir, self.up).normalize());
+        movement_dir.normalize_or_zero()
     }
 
     pub fn offset_view(&mut self, xrel: f32, yrel: f32) {
@@ -89,15 +92,20 @@ impl Camera {
 #[repr(C)]
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct CameraUniform {
-    view_proj: [[f32; 4]; 4],
+    to_view: [[f32; 4]; 4],
+    to_clip: [[f32; 4]; 4],
 }
 
 impl CameraUniform {
     pub fn new(camera: &Camera) -> Self {
-        Self { view_proj: camera.build_view_projection_matrix().to_cols_array_2d() }
+        Self {
+            to_view: camera.view_matrix().to_cols_array_2d(),
+            to_clip: camera.projection_matrix().to_cols_array_2d(),
+        }
     }
 
     pub fn update_view_proj(&mut self, camera: &Camera) {
-        self.view_proj = camera.build_view_projection_matrix().to_cols_array_2d();
+        self.to_view = camera.view_matrix().to_cols_array_2d();
+        self.to_clip = camera.projection_matrix().to_cols_array_2d();
     }
 }
