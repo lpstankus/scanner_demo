@@ -1,3 +1,4 @@
+use super::Ray;
 use glam::{Mat4, Vec3};
 
 #[repr(packed)]
@@ -43,9 +44,9 @@ impl Camera {
             zfar: 1000.0,
 
             yaw: std::f32::consts::PI,
-            pitch: 0.0,
+            pitch: (-89.0 as f32).to_radians(),
 
-            pos: (0.0, 1.0, 2.0).into(),
+            pos: (0.0, 30.0, 0.0).into(),
             dir: (-1.0, 0.0, 0.0).into(),
             up: (0.0, 1.0, 0.0).into(),
 
@@ -86,6 +87,10 @@ impl Camera {
             z: f32::sin(self.yaw) * f32::cos(self.pitch),
         };
         self.dir = dir.normalize();
+    }
+
+    pub fn raycast(&self) -> Ray {
+        Ray { pos: self.pos, dir: self.dir }
     }
 }
 

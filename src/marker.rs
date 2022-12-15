@@ -1,4 +1,5 @@
 use super::camera::{Camera, CameraUniform};
+use super::Ray;
 use glam::{Mat4, Vec3};
 use wgpu::util::DeviceExt;
 
@@ -11,9 +12,7 @@ pub const VERTICES: &[Vertex] = &[
     Vertex { position: [0.5, 0.5] },
 ];
 
-const INST_PER_ROW: usize = 10;
-const INST_N: usize = INST_PER_ROW * INST_PER_ROW;
-const INST_DISPLACEMENT: Vec3 = Vec3::new(INST_PER_ROW as f32 * 0.5, 0.5, INST_PER_ROW as f32 * 0.5);
+const INST_N: usize = 10000;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -66,6 +65,7 @@ impl MarkRaw {
 }
 
 pub struct Marker {
+    n_marks: usize,
     render_pipeline: wgpu::RenderPipeline,
 
     vertex_buffer: wgpu::Buffer,
@@ -137,11 +137,11 @@ impl Marker {
             usage: wgpu::BufferUsages::VERTEX,
         });
 
-        let instance_data = Self::marks_data();
-        let instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        let instance_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Instance Buffer"),
-            contents: bytemuck::cast_slice(&instance_data),
-            usage: wgpu::BufferUsages::VERTEX,
+            size: (INST_N * std::mem::size_of::<MarkRaw>()) as u64,
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
         });
 
         let camera_uniform = CameraUniform::new(&camera);
@@ -158,25 +158,36 @@ impl Marker {
             label: Some("camera_bind_group"),
         });
 
-        Self { render_pipeline, vertex_buffer, instance_buffer, camera_uniform, camera_buffer, camera_bind_group }
-    }
-
-    fn marks_data() -> Vec<MarkRaw> {
-        (0..INST_PER_ROW)
-            .flat_map(|z| {
-                (0..INST_PER_ROW).map(move |x| {
-                    let position = glam::Vec3 { x: x as f32, y: 0.0, z: z as f32 } - INST_DISPLACEMENT;
-                    Mark { position }.to_raw()
-                })
-            })
-            .collect::<Vec<_>>()
+        Self {
+            n_marks: 0,
+            render_pipeline,
+            vertex_buffer,
+            instance_buffer,
+            camera_uniform,
+            camera_buffer,
+            camera_bind_group,
+        }
     }
 
     pub fn render<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
         render_pass.set_pipeline(&self.render_pipeline);
-        render_pass.set_bind_group(0, &self.camera_bind_group, &[]);
         render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
         render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
-        render_pass.draw(0..6, 0..INST_N as _);
+        render_pass.set_bind_group(0, &self.camera_bind_group, &[]);
+        render_pass.draw(0..6, 0..self.n_marks as _);
+    }
+
+    pub fn cast_mark(&mut self, queue: &wgpu::Queue, ray: Ray) {
+        let alpha = -ray.pos.y / ray.dir.y;
+        if alpha > 0.0 && self.n_marks < INST_N {
+            let pos = ray.pos + alpha * ray.dir;
+            let mark = Mark { position: pos };
+            queue.write_buffer(
+                &self.instance_buffer,
+                (self.n_marks * std::mem::size_of::<MarkRaw>()) as wgpu::BufferAddress,
+                bytemuck::cast_slice(&[mark.to_raw()]),
+            );
+            self.n_marks += 1;
+        }
     }
 }

@@ -1,10 +1,15 @@
 use camera::Camera;
 use marker::Marker;
 use pollster::block_on;
-use sdl2::{event::Event, event::WindowEvent, keyboard::Keycode};
+use sdl2::{event::Event, event::WindowEvent, keyboard::Keycode, mouse::MouseButton};
 
 mod camera;
 mod marker;
+
+pub struct Ray {
+    pub pos: glam::Vec3,
+    pub dir: glam::Vec3,
+}
 
 struct State {
     surface: wgpu::Surface,
@@ -145,6 +150,9 @@ fn handle_events(sdl: &sdl2::Sdl, state: &mut State) {
             Event::MouseMotion { xrel, yrel, .. } => handle_mousemotion(xrel as f32, yrel as f32, state),
             Event::KeyDown { keycode, .. } => handle_keydown(keycode.unwrap(), state),
             Event::KeyUp { keycode, .. } => handle_keyup(keycode.unwrap(), state),
+            Event::MouseButtonDown { mouse_btn: MouseButton::Left, .. } => {
+                state.marker.cast_mark(&state.queue, state.camera.raycast())
+            }
             _ => {}
         }
     }
