@@ -151,7 +151,9 @@ fn handle_events(sdl: &sdl2::Sdl, state: &mut State) {
             Event::KeyDown { keycode, .. } => handle_keydown(keycode.unwrap(), state),
             Event::KeyUp { keycode, .. } => handle_keyup(keycode.unwrap(), state),
             Event::MouseButtonDown { mouse_btn: MouseButton::Left, .. } => {
-                state.marker.cast_mark(&state.queue, state.camera.raycast())
+                for _ in 0..100 {
+                    state.marker.cast_mark(&state.queue, state.camera.raycast())
+                }
             }
             _ => {}
         }

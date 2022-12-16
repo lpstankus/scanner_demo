@@ -33,7 +33,7 @@ pub const TO_WGPU_MATRIX: Mat4 = glam::mat4(
 );
 
 const CAM_SENSITIVITY: f32 = 0.001;
-const MOV_SENSITIVITY: f32 = 7.5;
+const MOV_SENSITIVITY: f32 = 20.0;
 
 impl Camera {
     pub fn new(aspect: f32) -> Self {
@@ -90,7 +90,9 @@ impl Camera {
     }
 
     pub fn raycast(&self) -> Ray {
-        Ray { pos: self.pos, dir: self.dir }
+        let rng = || rand::random::<f32>() - 0.5;
+        let offset = Vec3::new(rng(), rng(), rng()).normalize() * 0.25;
+        Ray { pos: self.pos, dir: (self.dir + offset).normalize() }
     }
 }
 
