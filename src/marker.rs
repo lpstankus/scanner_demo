@@ -1,5 +1,5 @@
 use super::camera::{Camera, CameraUniform};
-use super::Ray;
+use super::State;
 use glam::{Mat4, Vec3};
 use wgpu::util::DeviceExt;
 
@@ -177,17 +177,25 @@ impl Marker {
         render_pass.draw(0..6, 0..self.n_marks as _);
     }
 
-    pub fn cast_mark(&mut self, queue: &wgpu::Queue, ray: Ray) {
-        let alpha = -ray.pos.y / ray.dir.y;
-        if alpha > 0.0 && self.n_marks < INST_N {
-            let pos = ray.pos + alpha * ray.dir;
-            let mark = Mark { position: pos };
+    pub fn spawn_mark(&mut self, queue: &wgpu::Queue, position: Vec3) {
+        if self.n_marks < INST_N {
+            let mark = Mark { position };
             queue.write_buffer(
                 &self.instance_buffer,
                 (self.n_marks * std::mem::size_of::<MarkRaw>()) as wgpu::BufferAddress,
                 bytemuck::cast_slice(&[mark.to_raw()]),
             );
             self.n_marks += 1;
+        }
+    }
+}
+
+impl State {
+    pub fn cast_mark(&mut self) {
+        let ray = self.camera.cast_ray();
+        match self.world.collide(ray) {
+            Some(pos) => self.marker.spawn_mark(&self.queue, pos),
+            None => {}
         }
     }
 }

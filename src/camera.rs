@@ -91,7 +91,7 @@ impl Camera {
         self.dir = dir.normalize();
     }
 
-    pub fn raycast(&self) -> Ray {
+    pub fn cast_ray(&self) -> Ray {
         let angle = rand::random::<f32>() * 2.0 * PI;
         let length = rand::random::<f32>() * 0.25;
 

@@ -2,16 +2,18 @@ use camera::Camera;
 use marker::Marker;
 use pollster::block_on;
 use sdl2::{event::Event, event::WindowEvent, keyboard::Keycode, mouse::MouseButton};
+use world::World;
 
 mod camera;
 mod marker;
+mod world;
 
 pub struct Ray {
     pub pos: glam::Vec3,
     pub dir: glam::Vec3,
 }
 
-struct State {
+pub struct State {
     surface: wgpu::Surface,
     device: wgpu::Device,
     queue: wgpu::Queue,
@@ -19,6 +21,7 @@ struct State {
 
     camera: Camera,
     marker: Marker,
+    world: World,
 
     window: sdl2::video::Window,
 }
@@ -55,8 +58,9 @@ impl State {
 
         let camera = Camera::new(config.width as f32 / config.height as f32);
         let marker = Marker::new(&device, &config, &camera);
+        let world = World {};
 
-        Self { surface, device, queue, config, camera, marker, window }
+        Self { surface, device, queue, config, camera, marker, world, window }
     }
 
     fn resize(&mut self, width: i32, height: i32) {
@@ -152,7 +156,7 @@ fn handle_events(sdl: &sdl2::Sdl, state: &mut State) {
             Event::KeyUp { keycode, .. } => handle_keyup(keycode.unwrap(), state),
             Event::MouseButtonDown { mouse_btn: MouseButton::Left, .. } => {
                 for _ in 0..100 {
-                    state.marker.cast_mark(&state.queue, state.camera.raycast())
+                    state.cast_mark();
                 }
             }
             _ => {}
