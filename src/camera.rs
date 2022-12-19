@@ -25,12 +25,14 @@ pub struct Camera {
     pub mov: Movement,
 }
 
-pub const TO_WGPU_MATRIX: Mat4 = glam::mat4(
+const TO_WGPU_MATRIX: Mat4 = glam::mat4(
     glam::vec4(1.0, 0.0, 0.0, 0.0),
     glam::vec4(0.0, 1.0, 0.0, 0.0),
     glam::vec4(0.0, 0.0, 0.5, 0.0),
     glam::vec4(0.0, 0.0, 0.5, 1.0),
 );
+
+const PI: f32 = std::f32::consts::PI;
 
 const CAM_SENSITIVITY: f32 = 0.001;
 const MOV_SENSITIVITY: f32 = 20.0;
@@ -43,7 +45,7 @@ impl Camera {
             znear: 0.1,
             zfar: 1000.0,
 
-            yaw: std::f32::consts::PI,
+            yaw: PI,
             pitch: (-89.0 as f32).to_radians(),
 
             pos: (0.0, 30.0, 0.0).into(),
@@ -90,8 +92,13 @@ impl Camera {
     }
 
     pub fn raycast(&self) -> Ray {
-        let rng = || rand::random::<f32>() - 0.5;
-        let offset = Vec3::new(rng(), rng(), rng()).normalize() * 0.25;
+        let angle = rand::random::<f32>() * 2.0 * PI;
+        let length = rand::random::<f32>() * 0.25;
+
+        let right = Vec3::cross(self.dir, self.up).normalize();
+        let up = Vec3::cross(self.dir, right).normalize();
+
+        let offset = length * ((right * f32::sin(angle)) + (up * f32::cos(angle)));
         Ray { pos: self.pos, dir: (self.dir + offset).normalize() }
     }
 }
