@@ -27,9 +27,9 @@ struct VertexOutput {
 
 let PI = 3.1415926535;
 
-let DISTANCE_NEA = 50.0;
-let DISTANCE_MID = 100.0;
-let DISTANCE_FAR = 150.0;
+let DISTANCE_NEA = 100.0;
+let DISTANCE_MID = 200.0;
+let DISTANCE_FAR = 300.0;
 
 let COLOR_NEA = vec3<f32>(1.0, 0.0, 0.0);
 let COLOR_MID = vec3<f32>(0.0, 1.0, 0.0);

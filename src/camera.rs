@@ -37,7 +37,7 @@ const TO_WGPU_MATRIX: Mat4 = glam::mat4(
 const PI: f32 = std::f32::consts::PI;
 
 const CAM_SENSITIVITY: f32 = 0.001;
-const MOV_SENSITIVITY: f32 = 20.0;
+const MOV_SENSITIVITY: f32 = 100.0;
 
 impl Camera {
     pub fn new(aspect: f32) -> Self {
@@ -50,7 +50,7 @@ impl Camera {
             yaw: PI,
             pitch: (-89.0 as f32).to_radians(),
 
-            pos: (0.0, 30.0, 0.0).into(),
+            pos: (0.0, 200.0, 0.0).into(),
             dir: (-1.0, 0.0, 0.0).into(),
             up: (0.0, 1.0, 0.0).into(),
 
