@@ -174,6 +174,8 @@ fn handle_keydown(keycode: Keycode, state: &mut State) {
         Keycode::S => state.camera.mov.backward = true,
         Keycode::D => state.camera.mov.right = true,
         Keycode::A => state.camera.mov.left = true,
+        Keycode::Space => state.camera.mov.up = true,
+        Keycode::LShift => state.camera.mov.down = true,
         _ => {}
     }
 }
@@ -184,6 +186,8 @@ fn handle_keyup(keycode: Keycode, state: &mut State) {
         Keycode::S => state.camera.mov.backward = false,
         Keycode::D => state.camera.mov.right = false,
         Keycode::A => state.camera.mov.left = false,
+        Keycode::Space => state.camera.mov.up = false,
+        Keycode::LShift => state.camera.mov.down = false,
         _ => {}
     }
 }

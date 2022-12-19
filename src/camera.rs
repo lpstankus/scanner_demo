@@ -7,6 +7,8 @@ pub struct Movement {
     pub backward: bool,
     pub right: bool,
     pub left: bool,
+    pub up: bool,
+    pub down: bool,
 }
 
 pub struct Camera {
@@ -52,7 +54,7 @@ impl Camera {
             dir: (-1.0, 0.0, 0.0).into(),
             up: (0.0, 1.0, 0.0).into(),
 
-            mov: Movement { forward: false, backward: false, right: false, left: false },
+            mov: Movement { forward: false, backward: false, right: false, left: false, up: false, down: false },
         }
     }
 
@@ -70,11 +72,16 @@ impl Camera {
     }
 
     fn movement_dir(&self) -> Vec3 {
+        let right = Vec3::cross(self.dir, self.up).normalize();
+        let up = Vec3::cross(right, self.dir).normalize();
+
         let mut movement_dir = Vec3::splat(0.0);
         self.mov.forward.then(|| movement_dir += self.dir);
         self.mov.backward.then(|| movement_dir -= self.dir);
-        self.mov.right.then(|| movement_dir += Vec3::cross(self.dir, self.up).normalize());
-        self.mov.left.then(|| movement_dir -= Vec3::cross(self.dir, self.up).normalize());
+        self.mov.right.then(|| movement_dir += right);
+        self.mov.left.then(|| movement_dir -= right);
+        self.mov.up.then(|| movement_dir += up);
+        self.mov.down.then(|| movement_dir -= up);
         movement_dir.normalize_or_zero()
     }
 
