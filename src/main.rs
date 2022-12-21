@@ -8,6 +8,7 @@ mod camera;
 mod marker;
 mod world;
 
+#[derive(Clone, Copy)]
 pub struct Ray {
     pub pos: glam::Vec3,
     pub dir: glam::Vec3,
@@ -58,7 +59,7 @@ impl State {
 
         let camera = Camera::new(config.width as f32 / config.height as f32);
         let marker = Marker::new(&device, &config, &camera);
-        let world = World {};
+        let world = World::new();
 
         Self { surface, device, queue, config, camera, marker, world, window }
     }

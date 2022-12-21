@@ -12,7 +12,7 @@ pub const VERTICES: &[Vertex] = &[
     Vertex { position: [0.5, 0.5] },
 ];
 
-const INST_N: usize = 10000;
+const INST_N: usize = 1000000;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
