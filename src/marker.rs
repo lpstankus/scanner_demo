@@ -13,6 +13,7 @@ pub const VERTICES: &[Vertex] = &[
 ];
 
 const INST_N: usize = 1000000;
+const MARKER_COOLDOWN: f64 = 0.001;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -74,6 +75,9 @@ pub struct Marker {
     pub camera_uniform: CameraUniform,
     pub camera_buffer: wgpu::Buffer,
     camera_bind_group: wgpu::BindGroup,
+
+    pub should_cast: bool,
+    marker_timer: f64,
 }
 
 impl Marker {
@@ -166,6 +170,8 @@ impl Marker {
             camera_uniform,
             camera_buffer,
             camera_bind_group,
+            marker_timer: 0.0,
+            should_cast: false,
         }
     }
 
@@ -175,6 +181,21 @@ impl Marker {
         render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
         render_pass.set_bind_group(0, &self.camera_bind_group, &[]);
         render_pass.draw(0..6, 0..self.n_marks as _);
+    }
+
+    pub fn update(&mut self, dt: f64) -> u32 {
+        if self.marker_timer < 0.0 {
+            self.marker_timer = 0.0;
+        } else {
+            self.marker_timer -= dt;
+        }
+
+        let mut count = 0;
+        while self.marker_timer <= 0.0 && self.should_cast {
+            self.marker_timer += MARKER_COOLDOWN;
+            count += 1;
+        }
+        count
     }
 
     pub fn spawn_mark(&mut self, queue: &wgpu::Queue, position: Vec3) {

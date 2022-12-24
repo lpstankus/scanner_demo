@@ -76,6 +76,11 @@ impl State {
         self.camera.update(dt);
         self.marker.camera_uniform.update_view_proj(&self.camera);
         self.queue.write_buffer(&self.marker.camera_buffer, 0, bytemuck::cast_slice(&[self.marker.camera_uniform]));
+
+        let n_marks_to_spawn = self.marker.update(dt);
+        for _ in 0..n_marks_to_spawn {
+            self.cast_mark();
+        }
     }
 
     fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
@@ -155,11 +160,8 @@ fn handle_events(sdl: &sdl2::Sdl, state: &mut State) {
             Event::MouseMotion { xrel, yrel, .. } => handle_mousemotion(xrel as f32, yrel as f32, state),
             Event::KeyDown { keycode, .. } => handle_keydown(keycode.unwrap(), state),
             Event::KeyUp { keycode, .. } => handle_keyup(keycode.unwrap(), state),
-            Event::MouseButtonDown { mouse_btn: MouseButton::Left, .. } => {
-                for _ in 0..100 {
-                    state.cast_mark();
-                }
-            }
+            Event::MouseButtonDown { mouse_btn: MouseButton::Left, .. } => state.marker.should_cast = true,
+            Event::MouseButtonUp { mouse_btn: MouseButton::Left, .. } => state.marker.should_cast = false,
             _ => {}
         }
     }
