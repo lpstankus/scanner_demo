@@ -23,9 +23,11 @@ struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
     @location(0) quad_position: vec2<f32>,
     @location(1) color: vec3<f32>,
+    @location(2) dist: f32,
 }
 
 let PI = 3.1415926535;
+let EULER = 2.7182818;
 
 let DISTANCE_NEA = 100.0;
 let DISTANCE_MID = 200.0;
@@ -58,11 +60,15 @@ fn vs_main(model: VertexInput, instance: InstanceInput) -> VertexOutput {
     let dist: f32 = distance(instance.pos, camera.pos);
 
     var out: VertexOutput;
+
     out.clip_position = camera.to_proj * model_to_view * vec4<f32>(model.position, 0.0, 1.0);
     out.quad_position = model.position;
+    out.dist = dist;
+
     out.color = COLOR_NEA;
     if dist > DISTANCE_NEA { out.color = mix(COLOR_NEA, COLOR_MID, smoothstep(DISTANCE_NEA, DISTANCE_MID, dist)); }
     if dist > DISTANCE_MID { out.color = mix(COLOR_MID, COLOR_FAR, smoothstep(DISTANCE_MID, DISTANCE_FAR, dist)); }
+
     return out;
 }
 
@@ -70,5 +76,9 @@ fn vs_main(model: VertexInput, instance: InstanceInput) -> VertexOutput {
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let quad_dist: f32 = sqrt(in.quad_position.x * in.quad_position.x + in.quad_position.y * in.quad_position.y) * 2.0;
     let alpha: f32 = cos((quad_dist * PI) / 2.0);
-    return vec4<f32>(in.color, clamp(alpha, 0.0, 1.0));
+
+    let sigm: f32 = 1.0 / (1.0 + pow(EULER, -(in.dist * 0.02 - 10.0)));
+    let alpha_scalar: f32 = 1.0 - sigm * 0.9;
+
+    return vec4<f32>(in.color, clamp(alpha, 0.0, 1.0) * alpha_scalar);
 }

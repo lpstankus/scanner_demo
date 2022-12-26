@@ -45,7 +45,7 @@ impl Camera {
             aspect,
             fovy: 45.0,
             znear: 0.1,
-            zfar: 1000.0,
+            zfar: 1000000.0,
 
             yaw: PI,
             pitch: (-89.0 as f32).to_radians(),
