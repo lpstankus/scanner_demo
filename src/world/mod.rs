@@ -5,11 +5,11 @@ use noise::NoiseFn;
 mod tables;
 
 const SEED: u32 = 115;
-const SCALE: f32 = 0.25;
+const SCALE: f32 = 0.01;
 const SURFACE_THRESHOLD: f64 = 0.5;
 
-const MAX_RAY_DIST: u32 = 30;
-const VOXEL_SIZE: f32 = 50.0;
+const VOXEL_SIZE: f32 = 5.0;
+const MAX_RAY_DIST: u32 = (1500.0 / VOXEL_SIZE) as u32;
 
 #[derive(Debug)]
 struct Triangle {
