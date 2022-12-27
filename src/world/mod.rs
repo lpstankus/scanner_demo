@@ -2,13 +2,21 @@ use super::Ray;
 use glam::{vec3, Vec3};
 use noise::NoiseFn;
 
+mod tables;
+
 const SEED: u32 = 115;
-const SCALE: f64 = 0.005;
+const SCALE: f32 = 0.25;
+const SURFACE_THRESHOLD: f64 = 0.5;
 
+const MAX_RAY_DIST: u32 = 30;
 const VOXEL_SIZE: f32 = 50.0;
-const HEIGHT: f32 = 5.0 * VOXEL_SIZE;
 
-const MAX_VOXEL_DIST: u32 = 1000;
+#[derive(Debug)]
+struct Triangle {
+    a: Vec3,
+    b: Vec3,
+    c: Vec3,
+}
 
 pub struct World {
     noise: noise::SuperSimplex,
@@ -34,7 +42,7 @@ impl World {
         let delta_t = VOXEL_SIZE * inv_dir * step;
         let mut voxel_incr = Vec3::ZERO;
 
-        for _ in 0..MAX_VOXEL_DIST {
+        for _ in 0..MAX_RAY_DIST {
             voxel_incr.x = ((t.x <= t.y) && (t.x <= t.z)) as u32 as f32;
             voxel_incr.y = ((t.y <= t.x) && (t.y <= t.z)) as u32 as f32;
             voxel_incr.z = ((t.z <= t.x) && (t.z <= t.y)) as u32 as f32;
@@ -51,17 +59,54 @@ impl World {
     }
 
     #[inline]
-    fn height(&self, pos: Vec3) -> f32 {
-        let noise = self.noise.get([pos.x as f64 * SCALE, pos.z as f64 * SCALE]) as f32;
-        (noise + 1.0) / 2.0 * HEIGHT
+    fn height(&self, pos: Vec3) -> f64 {
+        let noise_pos = SCALE * pos;
+        (self.noise.get([noise_pos.x as f64, noise_pos.y as f64, noise_pos.z as f64]) + 1.0) * 0.5
     }
 
     #[inline]
     fn voxel_collision(&self, voxel: Vec3, ray: Ray) -> Option<f32> {
-        let a = (voxel + vec3(0.5, 0.0, 0.0)) * VOXEL_SIZE;
-        let b = (voxel + vec3(1.0, -1.0, 1.0)) * VOXEL_SIZE;
-        let c = (voxel + vec3(0.0, -1.0, 1.0)) * VOXEL_SIZE;
-        ray_triangle_collision(ray, a, b, c)
+        for triangle in self.voxel_triangles(voxel) {
+            if let Some(t) = ray_triangle_collision(ray, triangle) {
+                return Some(t);
+            }
+        }
+        None
+    }
+
+    #[inline]
+    fn voxel_triangles(&self, voxel: Vec3) -> Vec<Triangle> {
+        let cube_indeces = [
+            voxel + vec3(0.0, 0.0, 0.0),
+            voxel + vec3(0.0, 0.0, 1.0),
+            voxel + vec3(1.0, 0.0, 1.0),
+            voxel + vec3(1.0, 0.0, 0.0),
+            voxel + vec3(0.0, 1.0, 0.0),
+            voxel + vec3(0.0, 1.0, 1.0),
+            voxel + vec3(1.0, 1.0, 1.0),
+            voxel + vec3(1.0, 1.0, 0.0),
+        ];
+
+        let mut cube_layout: usize = 0;
+        for (i, vertex) in cube_indeces.iter().enumerate() {
+            if self.height(vertex.clone()) < SURFACE_THRESHOLD {
+                cube_layout |= 1 << i;
+            }
+        }
+
+        let edges = tables::TRIANGULATION_TABLE[cube_layout];
+        let mut triangles = Vec::with_capacity(5);
+
+        let mut i = 0;
+        while edges[i] != -1 {
+            let a = edge_vertex(cube_indeces, edges[i + 0]);
+            let b = edge_vertex(cube_indeces, edges[i + 1]);
+            let c = edge_vertex(cube_indeces, edges[i + 2]);
+            triangles.push(Triangle { a, b, c });
+            i += 3;
+        }
+
+        triangles
     }
 }
 
@@ -83,11 +128,11 @@ fn calculate_t(pos: Vec3, inv_dir: Vec3) -> Vec3 {
 }
 
 #[inline]
-fn ray_triangle_collision(ray: Ray, p1: Vec3, p2: Vec3, p3: Vec3) -> Option<f32> {
+fn ray_triangle_collision(ray: Ray, triangle: Triangle) -> Option<f32> {
     const EPSILON: f32 = 0.0001;
 
-    let e1 = p2 - p1;
-    let e2 = p3 - p1;
+    let e1 = triangle.b - triangle.a;
+    let e2 = triangle.c - triangle.a;
 
     let p = Vec3::cross(ray.dir, e2);
     let det = Vec3::dot(e1, p);
@@ -97,7 +142,7 @@ fn ray_triangle_collision(ray: Ray, p1: Vec3, p2: Vec3, p3: Vec3) -> Option<f32>
 
     let inv_det = 1.0 / det;
 
-    let tv = ray.pos - p1;
+    let tv = ray.pos - triangle.a;
     let u = Vec3::dot(tv, p) * inv_det;
     if u < 0.0 || u > 1.0 {
         return None;
@@ -115,4 +160,12 @@ fn ray_triangle_collision(ray: Ray, p1: Vec3, p2: Vec3, p3: Vec3) -> Option<f32>
     }
 
     Some(t)
+}
+
+#[inline]
+fn edge_vertex(cube_vertices: [Vec3; 8], edge: i32) -> Vec3 {
+    let (i1, i2) = tables::EDGE_TABLE[edge as usize];
+    let a = cube_vertices[i1];
+    let b = cube_vertices[i2];
+    (Vec3::lerp(a, b, 0.5) - vec3(0.0, 1.0, 0.0)) * VOXEL_SIZE
 }
