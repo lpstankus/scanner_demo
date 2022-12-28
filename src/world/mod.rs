@@ -1,6 +1,7 @@
 use super::Ray;
 use glam::{vec3, Vec3};
 use noise::NoiseFn;
+use std::collections::HashMap;
 
 mod tables;
 
@@ -11,33 +12,47 @@ const SURFACE_THRESHOLD: f64 = 0.5;
 const VOXEL_SIZE: f32 = 5.0;
 const MAX_RAY_DIST: u32 = (1500.0 / VOXEL_SIZE) as u32;
 
-#[derive(Debug)]
+#[derive(Clone)]
 struct Triangle {
     a: Vec3,
     b: Vec3,
     c: Vec3,
 }
 
+type Voxel = (i32, i32, i32);
+
 pub struct World {
     noise: noise::SuperSimplex,
+    triangle_cache: HashMap<Voxel, Vec<Triangle>>,
 }
 
 impl World {
     pub fn new() -> Self {
-        let noise = noise::SuperSimplex::new(SEED);
-        Self { noise }
+        Self { noise: noise::SuperSimplex::new(SEED), triangle_cache: HashMap::new() }
     }
 
-    pub fn collide(&self, ray: Ray) -> Option<Vec3> {
+    pub fn collide(&mut self, ray: Ray) -> Option<Vec3> {
         let mut cur_voxel = (ray.pos / VOXEL_SIZE).floor() + vec3(0.0, 1.0, 0.0);
 
         if let Some(t_hit) = self.voxel_collision(cur_voxel, ray) {
             return Some(ray.pos + t_hit * ray.dir);
         }
 
-        let step = step_vector(ray.dir);
+        let step = {
+            let _step = |x: f32| (x < 0.0).then_some(-1.0).unwrap_or(1.0);
+            vec3(_step(ray.dir.x), _step(ray.dir.y), _step(ray.dir.z))
+        };
+
         let inv_dir = 1.0 / ray.dir;
-        let mut t = calculate_t(ray.pos, inv_dir);
+        let mut t = {
+            let min = (ray.pos / VOXEL_SIZE).floor() * VOXEL_SIZE;
+            let max = min + VOXEL_SIZE;
+
+            let t1 = (min - ray.pos) * inv_dir;
+            let t2 = (max - ray.pos) * inv_dir;
+
+            Vec3::max(t1, t2)
+        };
 
         let delta_t = VOXEL_SIZE * inv_dir * step;
         let mut voxel_incr = Vec3::ZERO;
@@ -59,23 +74,51 @@ impl World {
     }
 
     #[inline]
-    fn height(&self, pos: Vec3) -> f64 {
-        let noise_pos = SCALE * pos;
-        (self.noise.get([noise_pos.x as f64, noise_pos.y as f64, noise_pos.z as f64]) + 1.0) * 0.5
-    }
-
-    #[inline]
-    fn voxel_collision(&self, voxel: Vec3, ray: Ray) -> Option<f32> {
+    fn voxel_collision(&mut self, voxel: Vec3, ray: Ray) -> Option<f32> {
         for triangle in self.voxel_triangles(voxel) {
-            if let Some(t) = ray_triangle_collision(ray, triangle) {
-                return Some(t);
+            const EPSILON: f32 = 0.0001;
+
+            let e1 = triangle.b - triangle.a;
+            let e2 = triangle.c - triangle.a;
+
+            let p = Vec3::cross(ray.dir, e2);
+            let det = Vec3::dot(e1, p);
+            if det.abs() < EPSILON {
+                continue;
             }
+
+            let inv_det = 1.0 / det;
+
+            let tv = ray.pos - triangle.a;
+            let u = Vec3::dot(tv, p) * inv_det;
+            if u < 0.0 || u > 1.0 {
+                continue;
+            }
+
+            let q = Vec3::cross(tv, e1);
+            let v = Vec3::dot(ray.dir, q) * inv_det;
+            if v < 0.0 || u + v > 1.0 {
+                continue;
+            }
+
+            let t = Vec3::dot(e2, q) * inv_det;
+            if t < EPSILON {
+                continue;
+            }
+
+            return Some(t);
         }
+
         None
     }
 
     #[inline]
-    fn voxel_triangles(&self, voxel: Vec3) -> Vec<Triangle> {
+    fn voxel_triangles(&mut self, voxel: Vec3) -> Vec<Triangle> {
+        let vx = (voxel.x as i32, voxel.y as i32, voxel.z as i32);
+        if let Some(triangles) = self.triangle_cache.get(&vx) {
+            return triangles.to_vec();
+        }
+
         let cube_indeces = [
             voxel + vec3(0.0, 0.0, 0.0),
             voxel + vec3(0.0, 0.0, 1.0),
@@ -89,7 +132,7 @@ impl World {
 
         let mut cube_layout: usize = 0;
         for (i, vertex) in cube_indeces.iter().enumerate() {
-            if self.height(vertex.clone()) < SURFACE_THRESHOLD {
+            if self.surface_level(vertex.clone()) < SURFACE_THRESHOLD {
                 cube_layout |= 1 << i;
             }
         }
@@ -106,60 +149,15 @@ impl World {
             i += 3;
         }
 
+        self.triangle_cache.insert(vx, triangles.to_vec());
         triangles
     }
-}
 
-#[inline]
-fn step_vector(dir: Vec3) -> Vec3 {
-    let _step = |x: f32| (x < 0.0).then_some(-1.0).unwrap_or(1.0);
-    vec3(_step(dir.x), _step(dir.y), _step(dir.z))
-}
-
-#[inline]
-fn calculate_t(pos: Vec3, inv_dir: Vec3) -> Vec3 {
-    let min = (pos / VOXEL_SIZE).floor() * VOXEL_SIZE;
-    let max = min + VOXEL_SIZE;
-
-    let t1 = (min - pos) * inv_dir;
-    let t2 = (max - pos) * inv_dir;
-
-    Vec3::max(t1, t2)
-}
-
-#[inline]
-fn ray_triangle_collision(ray: Ray, triangle: Triangle) -> Option<f32> {
-    const EPSILON: f32 = 0.0001;
-
-    let e1 = triangle.b - triangle.a;
-    let e2 = triangle.c - triangle.a;
-
-    let p = Vec3::cross(ray.dir, e2);
-    let det = Vec3::dot(e1, p);
-    if det.abs() < EPSILON {
-        return None;
+    #[inline]
+    fn surface_level(&self, pos: Vec3) -> f64 {
+        let noise_pos = SCALE * VOXEL_SIZE * pos;
+        (self.noise.get([noise_pos.x as f64, noise_pos.y as f64, noise_pos.z as f64]) + 1.0) * 0.5
     }
-
-    let inv_det = 1.0 / det;
-
-    let tv = ray.pos - triangle.a;
-    let u = Vec3::dot(tv, p) * inv_det;
-    if u < 0.0 || u > 1.0 {
-        return None;
-    }
-
-    let q = Vec3::cross(tv, e1);
-    let v = Vec3::dot(ray.dir, q) * inv_det;
-    if v < 0.0 || u + v > 1.0 {
-        return None;
-    }
-
-    let t = Vec3::dot(e2, q) * inv_det;
-    if t < EPSILON {
-        return None;
-    }
-
-    Some(t)
 }
 
 #[inline]
