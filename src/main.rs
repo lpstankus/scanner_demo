@@ -14,6 +14,13 @@ pub struct Ray {
     pub dir: glam::Vec3,
 }
 
+#[derive(Clone)]
+pub struct Triangle {
+    pub a: glam::Vec3,
+    pub b: glam::Vec3,
+    pub c: glam::Vec3,
+}
+
 pub struct State {
     surface: wgpu::Surface,
     device: wgpu::Device,
@@ -73,9 +80,7 @@ impl State {
     }
 
     fn update(&mut self, dt: f64) {
-        self.camera.update(dt);
-        self.marker.camera_uniform.update_view_proj(&self.camera);
-        self.queue.write_buffer(&self.marker.camera_buffer, 0, bytemuck::cast_slice(&[self.marker.camera_uniform]));
+        self.update_camera(dt);
 
         let n_marks_to_spawn = self.marker.update(dt);
         for _ in 0..n_marks_to_spawn {

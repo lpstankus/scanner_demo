@@ -16,7 +16,7 @@ const INST_N: usize = 1000000;
 const MARKER_COOLDOWN: f64 = 0.001;
 
 #[repr(C)]
-#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+#[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct Vertex {
     position: [f32; 2],
 }
@@ -214,7 +214,7 @@ impl Marker {
 impl State {
     pub fn cast_mark(&mut self) {
         let ray = self.camera.cast_ray();
-        match self.world.collide(ray) {
+        match self.world.raycast(ray, -1.0) {
             Some(pos) => self.marker.spawn_mark(&self.queue, pos),
             None => {}
         }

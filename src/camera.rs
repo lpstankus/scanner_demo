@@ -1,5 +1,6 @@
-use super::Ray;
-use glam::{Mat4, Vec3};
+use super::Triangle;
+use super::{Ray, State};
+use glam::{vec3, Mat4, Vec3};
 
 #[repr(packed)]
 pub struct Movement {
@@ -36,24 +37,28 @@ const TO_WGPU_MATRIX: Mat4 = glam::mat4(
 
 const PI: f32 = std::f32::consts::PI;
 
+const N_ITERATIONS: i32 = 5;
+
+const CAM_SIZE: f32 = 1.0;
 const CAM_SENSITIVITY: f32 = 0.001;
-const MOV_SENSITIVITY: f32 = 100.0;
+const MOV_SPEED: f32 = 100.0;
 
 impl Camera {
     pub fn new(aspect: f32) -> Self {
+        let yaw = -PI / 2.0;
+        let pitch = 0.0;
+        let dir = Vec3 { x: f32::cos(yaw) * f32::cos(pitch), y: f32::sin(pitch), z: f32::sin(yaw) * f32::cos(pitch) };
+
         Self {
             aspect,
             fovy: 45.0,
             znear: 0.1,
             zfar: 1000000.0,
-
-            yaw: PI,
-            pitch: (-89.0 as f32).to_radians(),
-
-            pos: (0.0, 200.0, 0.0).into(),
-            dir: (-1.0, 0.0, 0.0).into(),
-            up: (0.0, 1.0, 0.0).into(),
-
+            yaw,
+            pitch,
+            pos: vec3(0.0, 0.0, -30.0),
+            dir,
+            up: vec3(0.0, 1.0, 0.0),
             mov: Movement { forward: false, backward: false, right: false, left: false, up: false, down: false },
         }
     }
@@ -65,10 +70,6 @@ impl Camera {
     fn projection_matrix(&self) -> Mat4 {
         let proj = Mat4::perspective_rh(self.fovy, self.aspect, self.znear, self.zfar);
         return TO_WGPU_MATRIX * proj;
-    }
-
-    pub fn update(&mut self, dt: f64) {
-        self.pos += self.movement_dir() * Vec3::splat(dt as f32) * MOV_SENSITIVITY;
     }
 
     fn movement_dir(&self) -> Vec3 {
@@ -111,7 +112,7 @@ impl Camera {
 }
 
 #[repr(C)]
-#[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+#[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct CameraUniform {
     pos: [f32; 3],
     padding: f32,
@@ -134,4 +135,57 @@ impl CameraUniform {
         self.to_view = camera.view_matrix().to_cols_array_2d();
         self.to_clip = camera.projection_matrix().to_cols_array_2d();
     }
+}
+
+impl State {
+    pub fn update_camera(&mut self, dt: f64) {
+        self.camera.pos += self.camera.movement_dir() * MOV_SPEED * dt as f32;
+
+        let triangle_list = self.world.retrieve_triangles(self.camera.pos, CAM_SIZE);
+        for _ in 0..N_ITERATIONS {
+            let mut inf_dir = Vec3::ZERO;
+            for triangle in &triangle_list {
+                if let Some(dir) = self.collide_camera(triangle.clone()) {
+                    inf_dir += dir;
+                }
+            }
+            if inf_dir != Vec3::ZERO {
+                self.camera.pos += inf_dir;
+                break;
+            }
+        }
+
+        self.marker.camera_uniform.update_view_proj(&self.camera);
+        self.queue.write_buffer(&self.marker.camera_buffer, 0, bytemuck::cast_slice(&[self.marker.camera_uniform]));
+    }
+
+    #[inline]
+    fn collide_camera(&mut self, triangle: Triangle) -> Option<Vec3> {
+        let e1 = triangle.b - triangle.a;
+        let e2 = triangle.c - triangle.a;
+
+        let n = Vec3::cross(e1, e2).normalize();
+        let dist = Vec3::dot(self.camera.pos - triangle.a, n);
+        let p = self.camera.pos - dist * n;
+
+        if dist <= CAM_SIZE && point_in_triangle(p, triangle) {
+            Some((CAM_SIZE - dist) * n)
+        } else {
+            None
+        }
+    }
+}
+
+#[inline]
+fn point_in_triangle(p: Vec3, t: Triangle) -> bool {
+    let sign = |p1: Vec3, p2: Vec3, p3: Vec3| (p1.x - p3.x) * (p2.y - p3.y) * (p1.y - p3.y);
+
+    let d1 = sign(p, t.a, t.b);
+    let d2 = sign(p, t.b, t.c);
+    let d3 = sign(p, t.c, t.a);
+
+    let has_neg = d1 < 0.0 || d2 < 0.0 || d3 < 0.0;
+    let has_pos = d1 > 0.0 || d2 > 0.0 || d3 > 0.0;
+
+    !(has_neg && has_pos)
 }
