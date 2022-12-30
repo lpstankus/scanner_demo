@@ -129,20 +129,21 @@ impl World {
             return triangles.to_vec();
         }
 
-        let cube_indeces = [
-            voxel + vec3(0.0, 0.0, 0.0),
-            voxel + vec3(0.0, 0.0, 1.0),
-            voxel + vec3(1.0, 0.0, 1.0),
-            voxel + vec3(1.0, 0.0, 0.0),
-            voxel + vec3(0.0, 1.0, 0.0),
-            voxel + vec3(0.0, 1.0, 1.0),
-            voxel + vec3(1.0, 1.0, 1.0),
-            voxel + vec3(1.0, 1.0, 0.0),
+        let mut cube_indeces = [
+            (voxel + vec3(0.0, 0.0, 0.0), 0.0),
+            (voxel + vec3(0.0, 0.0, 1.0), 0.0),
+            (voxel + vec3(1.0, 0.0, 1.0), 0.0),
+            (voxel + vec3(1.0, 0.0, 0.0), 0.0),
+            (voxel + vec3(0.0, 1.0, 0.0), 0.0),
+            (voxel + vec3(0.0, 1.0, 1.0), 0.0),
+            (voxel + vec3(1.0, 1.0, 1.0), 0.0),
+            (voxel + vec3(1.0, 1.0, 0.0), 0.0),
         ];
 
         let mut cube_layout: usize = 0;
-        for (i, vertex) in cube_indeces.iter().enumerate() {
-            if self.surface_level(vertex.clone()) < SURFACE_THRESHOLD {
+        for (i, vertex) in cube_indeces.iter_mut().enumerate() {
+            vertex.1 = self.surface_level(vertex.0);
+            if vertex.1 < SURFACE_THRESHOLD {
                 cube_layout |= 1 << i;
             }
         }
@@ -171,11 +172,12 @@ impl World {
 }
 
 #[inline]
-fn edge_vertex(cube_vertices: [Vec3; 8], edge: i32) -> Vec3 {
+fn edge_vertex(cube_vertices: [(Vec3, f64); 8], edge: i32) -> Vec3 {
     let (i1, i2) = tables::EDGE_TABLE[edge as usize];
-    let a = cube_vertices[i1];
-    let b = cube_vertices[i2];
-    (Vec3::lerp(a, b, 0.5) - vec3(0.0, 1.0, 0.0)) * VOXEL_SIZE
+    let (a_voxel, a_val) = cube_vertices[i1];
+    let (b_voxel, b_val) = cube_vertices[i2];
+    let t = (SURFACE_THRESHOLD - a_val) / (b_val - a_val);
+    Vec3::lerp(a_voxel, b_voxel, t as f32) * VOXEL_SIZE
 }
 
 #[inline]
