@@ -21,6 +21,10 @@ pub struct Triangle {
     pub c: glam::Vec3,
 }
 
+pub type Frustum = [glam::Vec4; 6];
+
+const TITLE_UPDATE_TIME: f64 = 1.0;
+
 pub struct State {
     surface: wgpu::Surface,
     device: wgpu::Device,
@@ -30,6 +34,9 @@ pub struct State {
     camera: Camera,
     marker: Marker,
     world: World,
+
+    title_timer: f64,
+    title_update: bool,
 
     window: sdl2::video::Window,
 }
@@ -68,7 +75,7 @@ impl State {
         let marker = Marker::new(&device, &config, &camera);
         let world = World::new();
 
-        Self { surface, device, queue, config, camera, marker, world, window }
+        Self { surface, device, queue, config, camera, marker, world, title_timer: 0.0, title_update: false, window }
     }
 
     fn resize(&mut self, width: i32, height: i32) {
@@ -81,10 +88,13 @@ impl State {
 
     fn update(&mut self, dt: f64) {
         self.update_camera(dt);
+        self.update_marker(dt);
 
-        let n_marks_to_spawn = self.marker.update(dt);
-        for _ in 0..n_marks_to_spawn {
-            self.cast_mark();
+        self.title_timer -= dt;
+        self.title_update = false;
+        if self.title_timer <= 0.0 {
+            self.title_timer += TITLE_UPDATE_TIME;
+            self.title_update = true;
         }
     }
 
@@ -108,8 +118,7 @@ impl State {
                 })],
                 depth_stencil_attachment: None,
             });
-
-            self.marker.render(&mut render_pass);
+            self.render_markers(&mut render_pass);
         }
 
         self.queue.submit(std::iter::once(encoder.finish()));

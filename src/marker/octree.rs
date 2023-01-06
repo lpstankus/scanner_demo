@@ -1,3 +1,4 @@
+use super::super::Frustum;
 use super::{Mark, MarkRaw};
 use glam::{vec3, Vec3};
 
@@ -93,6 +94,50 @@ impl Octree {
             self[id].content = Content::Parent(children_ids);
         }
     }
+
+    pub fn count(&self) -> usize {
+        let mut sum = 0;
+        for oct in &self.octants {
+            if let Content::Leaf(ref data) = oct.content {
+                sum += data.len();
+            }
+        }
+        sum
+    }
+
+    pub fn get_visible(&mut self, vec: &mut Vec<MarkRaw>, pos: Vec3, frustum: Frustum) {
+        vec.truncate(0);
+        self.get_visible_rec(vec, self.root, pos, frustum);
+    }
+
+    fn get_visible_rec(&mut self, vec: &mut Vec<MarkRaw>, id: u32, pos: Vec3, frustum: Frustum) {
+        if vec.len() == vec.capacity() {
+            return;
+        }
+
+        match self[id].content {
+            Content::Parent(children) => {
+                let mut children = children.clone();
+                children.sort_unstable_by(|a, b| {
+                    let dist_a = Vec3::distance_squared(self[*a].center, pos);
+                    let dist_b = Vec3::distance_squared(self[*b].center, pos);
+                    f32::total_cmp(&dist_b, &dist_a)
+                });
+                'outer: for child_id in children {
+                    for plane in frustum {
+                        if !self[child_id].collide(plane) {
+                            continue 'outer;
+                        }
+                    }
+                    self.get_visible_rec(vec, child_id, pos, frustum);
+                }
+            }
+            Content::Leaf(ref data) => {
+                let end = usize::min(vec.capacity() - vec.len(), data.len());
+                vec.extend(&data[..end]);
+            }
+        }
+    }
 }
 
 impl std::ops::Index<u32> for Octree {
@@ -133,5 +178,12 @@ impl Octant {
             || mark.pos.z >= self.center.z + self.extension;
 
         !(above || under)
+    }
+
+    #[inline]
+    fn collide(&self, plane: glam::Vec4) -> bool {
+        let r = self.extension * (plane.x.abs() + plane.y.abs() + plane.z.abs());
+        let s = Vec3::dot(plane.truncate(), self.center) - plane.w;
+        -r <= s
     }
 }

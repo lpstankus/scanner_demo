@@ -1,6 +1,5 @@
-use super::Triangle;
-use super::{Ray, State};
-use glam::{vec3, Mat4, Vec3};
+use super::{Frustum, Ray, State, Triangle};
+use glam::{vec3, Mat4, Vec3, Vec4Swizzles};
 
 #[repr(packed)]
 pub struct Movement {
@@ -21,7 +20,7 @@ pub struct Camera {
     yaw: f32,
     pitch: f32,
 
-    pos: Vec3,
+    pub pos: Vec3,
     dir: Vec3,
     up: Vec3,
 
@@ -108,6 +107,19 @@ impl Camera {
 
         let offset = length * ((right * f32::sin(angle)) + (up * f32::cos(angle)));
         Ray { pos: self.pos, dir: (self.dir + offset).normalize() }
+    }
+
+    pub fn frustum(&self) -> Frustum {
+        let to_plane = |vec: glam::Vec4| vec.xyz().extend(-vec.w);
+        let mat = self.projection_matrix() * self.view_matrix();
+        [
+            to_plane(mat.row(3) + mat.row(0)), // left
+            to_plane(mat.row(3) - mat.row(0)), // right
+            to_plane(mat.row(3) + mat.row(1)), // bottom
+            to_plane(mat.row(3) - mat.row(1)), // top
+            to_plane(mat.row(2)),              // near
+            to_plane(mat.row(3) - mat.row(2)),
+        ]
     }
 }
 

@@ -3,6 +3,8 @@ use super::State;
 use glam::{Mat4, Vec3};
 use wgpu::util::DeviceExt;
 
+mod octree;
+
 pub const VERTICES: &[Vertex] = &[
     Vertex { position: [-0.5, 0.5] },
     Vertex { position: [-0.5, -0.5] },
@@ -12,7 +14,7 @@ pub const VERTICES: &[Vertex] = &[
     Vertex { position: [0.5, 0.5] },
 ];
 
-const INST_N: usize = 1000000;
+pub const INST_N: usize = 1000000;
 const MARKER_COOLDOWN: f64 = 0.001;
 
 #[repr(C)]
@@ -33,20 +35,21 @@ impl Vertex {
     }
 }
 
-struct Mark {
-    position: Vec3,
+#[derive(Copy, Clone)]
+pub struct Mark {
+    pos: Vec3,
 }
 
 impl Mark {
     fn to_raw(&self) -> MarkRaw {
-        let transform = Mat4::from_translation(self.position);
-        MarkRaw { pos: self.position.into(), model: transform.to_cols_array_2d() }
+        let transform = Mat4::from_translation(self.pos);
+        MarkRaw { pos: self.pos.into(), model: transform.to_cols_array_2d() }
     }
 }
 
 #[repr(C)]
-#[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
-struct MarkRaw {
+#[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct MarkRaw {
     pos: [f32; 3],
     model: [[f32; 4]; 4],
 }
@@ -56,9 +59,8 @@ impl MarkRaw {
         wgpu::vertex_attr_array![1 => Float32x3, 2 => Float32x4, 3 => Float32x4, 4 => Float32x4, 5 => Float32x4];
 
     fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
-        use std::mem;
         wgpu::VertexBufferLayout {
-            array_stride: mem::size_of::<Self>() as wgpu::BufferAddress,
+            array_stride: std::mem::size_of::<Self>() as wgpu::BufferAddress,
             step_mode: wgpu::VertexStepMode::Instance,
             attributes: &Self::ATTRIBS,
         }
@@ -66,9 +68,9 @@ impl MarkRaw {
 }
 
 pub struct Marker {
-    n_marks: usize,
     render_pipeline: wgpu::RenderPipeline,
 
+    instances: Vec<MarkRaw>,
     vertex_buffer: wgpu::Buffer,
     instance_buffer: wgpu::Buffer,
 
@@ -76,13 +78,15 @@ pub struct Marker {
     pub camera_buffer: wgpu::Buffer,
     camera_bind_group: wgpu::BindGroup,
 
+    octree: octree::Octree,
+
     pub should_cast: bool,
     marker_timer: f64,
 }
 
 impl Marker {
     pub fn new(device: &wgpu::Device, config: &wgpu::SurfaceConfiguration, camera: &Camera) -> Self {
-        let shader = device.create_shader_module(wgpu::include_wgsl!("shader.wgsl"));
+        let shader = device.create_shader_module(wgpu::include_wgsl!("../shader.wgsl"));
 
         let camera_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             entries: &[wgpu::BindGroupLayoutEntry {
@@ -162,61 +166,59 @@ impl Marker {
             label: Some("camera_bind_group"),
         });
 
+        let octree = octree::Octree::new(128);
+
         Self {
-            n_marks: 0,
             render_pipeline,
+            instances: Vec::with_capacity(INST_N),
             vertex_buffer,
             instance_buffer,
             camera_uniform,
             camera_buffer,
             camera_bind_group,
+            octree,
             marker_timer: 0.0,
             should_cast: false,
-        }
-    }
-
-    pub fn render<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
-        render_pass.set_pipeline(&self.render_pipeline);
-        render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-        render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
-        render_pass.set_bind_group(0, &self.camera_bind_group, &[]);
-        render_pass.draw(0..6, 0..self.n_marks as _);
-    }
-
-    pub fn update(&mut self, dt: f64) -> u32 {
-        if self.marker_timer < 0.0 {
-            self.marker_timer = 0.0;
-        } else {
-            self.marker_timer -= dt;
-        }
-
-        let mut count = 0;
-        while self.marker_timer <= 0.0 && self.should_cast {
-            self.marker_timer += MARKER_COOLDOWN;
-            count += 1;
-        }
-        count
-    }
-
-    pub fn spawn_mark(&mut self, queue: &wgpu::Queue, position: Vec3) {
-        if self.n_marks < INST_N {
-            let mark = Mark { position };
-            queue.write_buffer(
-                &self.instance_buffer,
-                (self.n_marks * std::mem::size_of::<MarkRaw>()) as wgpu::BufferAddress,
-                bytemuck::cast_slice(&[mark.to_raw()]),
-            );
-            self.n_marks += 1;
         }
     }
 }
 
 impl State {
-    pub fn cast_mark(&mut self) {
-        let ray = self.camera.cast_ray();
-        match self.world.raycast(ray, -1.0) {
-            Some(pos) => self.marker.spawn_mark(&self.queue, pos),
-            None => {}
+    pub fn render_markers<'a>(&'a mut self, render_pass: &mut wgpu::RenderPass<'a>) {
+        let frustum = self.camera.frustum();
+        self.marker.octree.get_visible(&mut self.marker.instances, self.camera.pos, frustum);
+        self.queue.write_buffer(
+            &self.marker.instance_buffer,
+            0 as wgpu::BufferAddress,
+            bytemuck::cast_slice(&self.marker.instances),
+        );
+        let n_marks = self.marker.instances.len();
+
+        if self.title_update {
+            let title = format!("Scanner Demo | marks: {}({})", n_marks, self.marker.octree.count());
+            _ = self.window.set_title(title.as_str());
+        }
+
+        render_pass.set_pipeline(&self.marker.render_pipeline);
+        render_pass.set_vertex_buffer(0, self.marker.vertex_buffer.slice(..));
+        render_pass.set_vertex_buffer(1, self.marker.instance_buffer.slice(..));
+        render_pass.set_bind_group(0, &self.marker.camera_bind_group, &[]);
+        render_pass.draw(0..6, 0..n_marks as _);
+    }
+
+    pub fn update_marker(&mut self, dt: f64) {
+        if self.marker.marker_timer < 0.0 {
+            self.marker.marker_timer = 0.0;
+        } else {
+            self.marker.marker_timer -= dt;
+        }
+
+        while self.marker.marker_timer <= 0.0 && self.marker.should_cast {
+            self.marker.marker_timer += MARKER_COOLDOWN;
+            let ray = self.camera.cast_ray();
+            if let Some(pos) = self.world.raycast(ray, -1.0) {
+                self.marker.octree.insert(Mark { pos });
+            }
         }
     }
 }
