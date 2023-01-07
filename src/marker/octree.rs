@@ -24,8 +24,49 @@ impl Octree {
     }
 
     pub fn insert(&mut self, mark: Mark) {
-        if !self[self.root].contains(mark) {
-            return;
+        while !self[self.root].contains(mark) {
+            let center = self[self.root].center;
+            let extension = self[self.root].extension;
+
+            let mut child_id = 0;
+            let mut new_center = center;
+            for i in 0..3 {
+                if mark.pos[i] > center[i] {
+                    child_id |= 1 << i;
+                    new_center[i] += extension;
+                } else {
+                    new_center[i] -= extension;
+                }
+            }
+
+            let mut children_id = Vec::with_capacity(8);
+            for i in 0..8 {
+                if i == child_id {
+                    children_id.push(self.root);
+                } else {
+                    let mut center = new_center;
+                    for j in 0..3 {
+                        if i & 1 << j != 0 {
+                            center[j] += extension;
+                        } else {
+                            center[j] -= extension;
+                        }
+                    }
+                    children_id.push(self.octants.len() as u32);
+                    self.octants.push(Octant {
+                        center,
+                        extension,
+                        content: Content::Leaf(Vec::with_capacity(self.bucket_size as usize)),
+                    });
+                }
+            }
+
+            self.root = self.octants.len() as u32;
+            self.octants.push(Octant {
+                center: new_center,
+                extension: extension * 2.0,
+                content: Content::Parent(children_id.try_into().unwrap()),
+            });
         }
 
         let mark = mark.to_raw();
@@ -67,17 +108,18 @@ impl Octree {
                     }
 
                     for i in 0..8 {
-                        let mut offset = Vec3::ZERO;
+                        let extension = self[id].extension / 2.0;
+                        let mut center = self[id].center;
                         for j in 0..3 {
                             if (7 - i) & 1 << j != 0 {
-                                offset[j] = self[id].extension / 2.0;
+                                center[j] += extension;
                             } else {
-                                offset[j] = -self[id].extension / 2.0;
+                                center[j] -= extension;
                             }
                         }
                         children.push(Octant {
-                            center: self[id].center + offset,
-                            extension: self[id].extension / 2.0,
+                            center,
+                            extension,
                             content: Content::Leaf(children_data.pop().unwrap()),
                         });
                     }
