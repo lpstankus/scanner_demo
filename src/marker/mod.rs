@@ -15,7 +15,7 @@ pub const VERTICES: &[Vertex] = &[
 ];
 
 pub const INST_N: usize = 1000000;
-const MARKER_COOLDOWN: f64 = 0.001;
+const MARKER_COOLDOWN: f64 = 0.0005;
 
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]

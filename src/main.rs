@@ -133,7 +133,7 @@ fn main() -> Result<(), String> {
     let timer = sdl.timer()?;
     let video = sdl.video()?;
     let window = video
-        .window("Scanner Demo", 1280, 720)
+        .window("Scanner Demo", 1600, 900)
         .position_centered()
         .input_grabbed()
         .build()
