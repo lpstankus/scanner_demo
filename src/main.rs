@@ -1,7 +1,7 @@
 use camera::Camera;
 use marker::Marker;
 use pollster::block_on;
-use sdl2::{event::Event, event::WindowEvent, keyboard::Keycode, mouse::MouseButton};
+use sdl2::{event::Event, event::WindowEvent, keyboard::Keycode, mouse::MouseButton, mouse::MouseWheelDirection};
 use world::World;
 
 mod camera;
@@ -176,9 +176,14 @@ fn handle_events(sdl: &sdl2::Sdl, state: &mut State) {
             Event::KeyUp { keycode, .. } => handle_keyup(keycode.unwrap(), state),
             Event::MouseButtonDown { mouse_btn: MouseButton::Left, .. } => state.marker.should_cast = true,
             Event::MouseButtonUp { mouse_btn: MouseButton::Left, .. } => state.marker.should_cast = false,
+            Event::MouseWheel { y, direction: MouseWheelDirection::Normal, .. } => handle_mousewheel(y, state),
             _ => {}
         }
     }
+}
+
+fn handle_mousewheel(y: i32, state: &mut State) {
+    state.camera.ray_range = f32::clamp(state.camera.ray_range + y as f32 * 0.1, 0.1, 1.0);
 }
 
 fn handle_mousemotion(xrel: f32, yrel: f32, state: &mut State) {

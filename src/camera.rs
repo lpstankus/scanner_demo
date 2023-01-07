@@ -24,6 +24,7 @@ pub struct Camera {
     dir: Vec3,
     up: Vec3,
 
+    pub ray_range: f32,
     pub mov: Movement,
 }
 
@@ -58,6 +59,7 @@ impl Camera {
             pos: vec3(0.0, 0.0, -30.0),
             dir,
             up: vec3(0.0, 1.0, 0.0),
+            ray_range: 0.5,
             mov: Movement { forward: false, backward: false, right: false, left: false, up: false, down: false },
         }
     }
@@ -100,7 +102,7 @@ impl Camera {
 
     pub fn cast_ray(&self) -> Ray {
         let angle = rand::random::<f32>() * 2.0 * PI;
-        let length = rand::random::<f32>() * 0.25;
+        let length = rand::random::<f32>() * self.ray_range * 0.5;
 
         let right = Vec3::cross(self.dir, self.up).normalize();
         let up = Vec3::cross(self.dir, right).normalize();
