@@ -112,7 +112,16 @@ impl Camera {
     }
 
     pub fn frustum(&self) -> Frustum {
-        let to_plane = |vec: glam::Vec4| vec.xyz().extend(-vec.w);
+        let to_plane = |vec: glam::Vec4| {
+            let mag = vec.xyz().length();
+            let plane = glam::vec4(vec.x, vec.y, vec.z, -vec.w);
+            if mag.is_normal() {
+                plane / mag
+            } else {
+                plane
+            }
+        };
+
         let mat = self.projection_matrix() * self.view_matrix();
         [
             to_plane(mat.row(3) + mat.row(0)), // left
