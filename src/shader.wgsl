@@ -62,8 +62,8 @@ fn vs_main(model: VertexInput, instance: InstanceInput) -> VertexOutput {
     out.dist = dist;
 
     out.color = COLOR_NEA;
-    if dist > DISTANCE_NEA { out.color = mix(COLOR_NEA, COLOR_MID, smoothstep(DISTANCE_NEA, DISTANCE_MID, dist)); }
-    if dist > DISTANCE_MID { out.color = mix(COLOR_MID, COLOR_FAR, smoothstep(DISTANCE_MID, DISTANCE_FAR, dist)); }
+    out.color = mix(out.color, COLOR_MID, smoothstep(DISTANCE_NEA, DISTANCE_MID, dist));
+    out.color = mix(out.color, COLOR_FAR, smoothstep(DISTANCE_MID, DISTANCE_FAR, dist));
 
     return out;
 }
