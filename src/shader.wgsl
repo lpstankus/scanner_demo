@@ -13,10 +13,6 @@ struct VertexInput {
 
 struct InstanceInput {
     @location(1) pos: vec3<f32>,
-    @location(2) model_matrix_0: vec4<f32>,
-    @location(3) model_matrix_1: vec4<f32>,
-    @location(4) model_matrix_2: vec4<f32>,
-    @location(5) model_matrix_3: vec4<f32>,
 }
 
 struct VertexOutput {
@@ -40,10 +36,10 @@ let COLOR_FAR = vec3<f32>(0.0, 0.2, 1.0);
 @vertex
 fn vs_main(model: VertexInput, instance: InstanceInput) -> VertexOutput {
     let model_matrix = mat4x4<f32>(
-        instance.model_matrix_0,
-        instance.model_matrix_1,
-        instance.model_matrix_2,
-        instance.model_matrix_3,
+        vec4<f32>(1.0, 0.0, 0.0, 0.0),
+        vec4<f32>(0.0, 1.0, 0.0, 0.0),
+        vec4<f32>(0.0, 0.0, 1.0, 0.0),
+        vec4<f32>(instance.pos, 1.0),
     );
 
     var model_to_view: mat4x4<f32> = camera.to_view * model_matrix;

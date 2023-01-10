@@ -1,6 +1,6 @@
 use super::camera::{Camera, CameraUniform};
 use super::State;
-use glam::{Mat4, Vec3};
+use glam::Vec3;
 use wgpu::util::DeviceExt;
 
 mod octree;
@@ -42,8 +42,7 @@ pub struct Mark {
 
 impl Mark {
     fn to_raw(&self) -> MarkRaw {
-        let transform = Mat4::from_translation(self.pos);
-        MarkRaw { pos: self.pos.into(), model: transform.to_cols_array_2d() }
+        MarkRaw { pos: self.pos.into() }
     }
 }
 
@@ -51,12 +50,10 @@ impl Mark {
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct MarkRaw {
     pos: [f32; 3],
-    model: [[f32; 4]; 4],
 }
 
 impl MarkRaw {
-    const ATTRIBS: [wgpu::VertexAttribute; 5] =
-        wgpu::vertex_attr_array![1 => Float32x3, 2 => Float32x4, 3 => Float32x4, 4 => Float32x4, 5 => Float32x4];
+    const ATTRIBS: [wgpu::VertexAttribute; 1] = wgpu::vertex_attr_array![1 => Float32x3];
 
     fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
         wgpu::VertexBufferLayout {
