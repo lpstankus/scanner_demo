@@ -1,5 +1,5 @@
 struct CameraUniform {
-    pos: vec3<f32>,
+    pos: vec4<f32>,
     to_view: mat4x4<f32>,
     to_proj: mat4x4<f32>,
 };
@@ -53,7 +53,7 @@ fn vs_main(model: VertexInput, instance: InstanceInput) -> VertexOutput {
     model_to_view[2][1] = 0.0;
     model_to_view[2][2] = 1.0;
 
-    let dist: f32 = distance(instance.pos, camera.pos);
+    let dist: f32 = distance(instance.pos, camera.pos.xyz);
 
     var out: VertexOutput;
 
