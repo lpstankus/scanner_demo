@@ -1,4 +1,4 @@
-use super::{Ray, Triangle};
+use super::util::{Ray, Triangle};
 use glam::{vec3, Vec3};
 use noise::NoiseFn;
 use std::collections::HashMap;

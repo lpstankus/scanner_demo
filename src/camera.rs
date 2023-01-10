@@ -1,4 +1,5 @@
-use super::{Frustum, Ray, State, Triangle};
+use super::util::{Frustum, Ray, Triangle};
+use super::State;
 use glam::{vec3, Mat4, Vec3, Vec4Swizzles};
 
 #[repr(packed)]
