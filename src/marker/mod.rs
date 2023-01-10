@@ -163,7 +163,7 @@ impl Marker {
             label: Some("camera_bind_group"),
         });
 
-        let octree = octree::Octree::new(128);
+        let octree = octree::Octree::new();
 
         Self {
             render_pipeline,

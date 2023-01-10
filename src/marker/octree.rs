@@ -2,23 +2,22 @@ use super::super::util::{Frustum, SVec};
 use super::{Mark, MarkRaw};
 use glam::{vec3, Vec3};
 
+const BUCKET_SIZE: usize = 256;
 const BASE_EXTENSION: f32 = 50.0;
 
 pub struct Octree {
     root: u32,
-    bucket_size: u32,
     octants: Vec<Octant>,
 }
 
 impl Octree {
-    pub fn new(bucket_size: u32) -> Self {
+    pub fn new() -> Self {
         Self {
             root: 0,
-            bucket_size,
             octants: vec![Octant {
                 center: vec3(0.0, 0.0, 0.0),
                 extension: BASE_EXTENSION,
-                content: Content::Leaf(Vec::with_capacity(bucket_size as usize)),
+                content: Content::Leaf(SVec::new()),
             }],
         }
     }
@@ -53,11 +52,7 @@ impl Octree {
                         }
                     }
                     children_id.push(self.octants.len() as u32);
-                    self.octants.push(Octant {
-                        center,
-                        extension,
-                        content: Content::Leaf(Vec::with_capacity(self.bucket_size as usize)),
-                    });
+                    self.octants.push(Octant { center, extension, content: Content::Leaf(SVec::new()) });
                 }
             }
 
@@ -70,7 +65,6 @@ impl Octree {
         }
 
         let mark = mark.to_raw();
-        let bucket_size = self.bucket_size as usize;
         let mut id = self.root;
         loop {
             let center = self[id].center;
@@ -86,18 +80,15 @@ impl Octree {
                     continue;
                 }
                 Content::Leaf(ref mut data) => {
-                    if data.len() < bucket_size {
-                        data.push(mark);
+                    if data.push(mark) {
                         return;
                     }
 
                     let mut children = Vec::with_capacity(8);
                     let mut children_data = Vec::with_capacity(8);
-                    for _ in 0..8 {
-                        children_data.push(Vec::with_capacity(bucket_size));
-                    }
+                    (0..8).for_each(|_| children_data.push(SVec::new()));
 
-                    for mark in data {
+                    for mark in data.into_iter() {
                         let mut child_id = 0;
                         for i in 0..3 {
                             if mark.pos[i] > center[i] {
@@ -158,6 +149,7 @@ impl Octree {
         }
 
         match self[id].content {
+            Content::Leaf(ref mut data) => vec.extend(data.into_iter()),
             Content::Parent(children) => {
                 let mut children = children.clone();
                 children.sort_unstable_by(|a, b| {
@@ -173,10 +165,6 @@ impl Octree {
                     }
                     self.get_visible_rec(vec, child_id, pos, frustum);
                 }
-            }
-            Content::Leaf(ref data) => {
-                let end = usize::min(vec.capacity() - vec.len(), data.len());
-                vec.extend(&data[..end]);
             }
         }
     }
@@ -198,7 +186,7 @@ impl std::ops::IndexMut<u32> for Octree {
 #[derive(Debug)]
 enum Content {
     Parent([u32; 8]),
-    Leaf(Vec<MarkRaw>),
+    Leaf(SVec<MarkRaw, BUCKET_SIZE>),
 }
 
 #[derive(Debug)]
