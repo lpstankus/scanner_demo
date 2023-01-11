@@ -184,23 +184,26 @@ impl State {
     pub fn render_markers<'a>(&'a mut self, render_pass: &mut wgpu::RenderPass<'a>) {
         let frustum = self.camera.frustum();
         self.marker.octree.get_visible(&mut self.marker.instances, self.camera.pos, frustum);
+
+        let n_total = self.marker.instances.len();
+        let n_marks = usize::min(self.marker.instances.len(), INST_N);
+
         self.queue.write_buffer(
             &self.marker.instance_buffer,
             0 as wgpu::BufferAddress,
-            bytemuck::cast_slice(&self.marker.instances),
+            bytemuck::cast_slice(&self.marker.instances[usize::saturating_sub(n_total, INST_N)..]),
         );
-        let n_marks = self.marker.instances.len();
-
-        if self.title_update {
-            let title = format!("Scanner Demo | marks: {}({})", n_marks, self.marker.octree.count());
-            _ = self.window.set_title(title.as_str());
-        }
 
         render_pass.set_pipeline(&self.marker.render_pipeline);
         render_pass.set_vertex_buffer(0, self.marker.vertex_buffer.slice(..));
         render_pass.set_vertex_buffer(1, self.marker.instance_buffer.slice(..));
         render_pass.set_bind_group(0, &self.marker.camera_bind_group, &[]);
         render_pass.draw(0..6, 0..n_marks as _);
+
+        if self.title_update {
+            let title = format!("Scanner Demo | marks: {}({})", n_marks, self.marker.octree.count());
+            _ = self.window.set_title(title.as_str());
+        }
     }
 
     pub fn update_marker(&mut self, dt: f64) {
