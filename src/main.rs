@@ -1,7 +1,14 @@
+use std::time::Instant;
+
 use camera::Camera;
 use marker::Marker;
 use pollster::block_on;
-use sdl2::{event::Event, event::WindowEvent, keyboard::Keycode, mouse::MouseButton, mouse::MouseWheelDirection};
+use winit::{
+    dpi::{LogicalPosition, LogicalSize},
+    event::*,
+    event_loop::{ControlFlow, EventLoop},
+    window::WindowBuilder,
+};
 use world::World;
 
 mod camera;
@@ -24,12 +31,12 @@ pub struct State {
     title_timer: f64,
     title_update: bool,
 
-    window: sdl2::video::Window,
+    window: winit::window::Window,
 }
 
 impl State {
-    fn new(window: sdl2::video::Window) -> State {
-        let size = window.drawable_size();
+    fn new(window: winit::window::Window) -> State {
+        let size = window.inner_size();
 
         let instance = wgpu::Instance::new(wgpu::Backends::PRIMARY);
         let surface = unsafe { instance.create_surface(&window) };
@@ -50,9 +57,10 @@ impl State {
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: surface.get_supported_formats(&adapter)[0],
-            width: size.0,
-            height: size.1,
+            width: size.width,
+            height: size.height,
             present_mode: wgpu::PresentMode::Immediate,
+            alpha_mode: wgpu::CompositeAlphaMode::Auto,
         };
 
         surface.configure(&device, &config);
@@ -64,12 +72,10 @@ impl State {
         Self { surface, device, queue, config, camera, marker, world, title_timer: 0.0, title_update: false, window }
     }
 
-    fn resize(&mut self, width: i32, height: i32) {
-        if width > 0 && height > 0 {
-            self.config.width = width as u32;
-            self.config.height = height as u32;
-            self.surface.configure(&self.device, &self.config);
-        }
+    fn resize(&mut self, width: u32, height: u32) {
+        self.config.width = width as u32;
+        self.config.height = height as u32;
+        self.surface.configure(&self.device, &self.config);
     }
 
     fn update(&mut self, dt: f64) {
@@ -115,87 +121,85 @@ impl State {
 }
 
 fn main() -> Result<(), String> {
-    let sdl = sdl2::init()?;
-    let timer = sdl.timer()?;
-    let video = sdl.video()?;
-    let window = video
-        .window("Scanner Demo", 1600, 900)
-        .position_centered()
-        .input_grabbed()
-        .build()
-        .map_err(|e| e.to_string())?;
-
-    sdl.mouse().show_cursor(true);
-    sdl.mouse().set_relative_mouse_mode(true);
+    let event_loop = EventLoop::new();
+    let window = WindowBuilder::new().build(&event_loop).unwrap();
 
     env_logger::init();
-    let mut state = State::new(window);
+    let mut app_state = State::new(window);
 
-    let mut cur = timer.performance_counter();
-    let mut prev = cur;
-    loop {
-        cur = timer.performance_counter();
-        let dt = (cur - prev) as f64 / timer.performance_frequency() as f64;
-        prev = cur;
+    app_state.window.set_cursor_position(LogicalPosition { x: 0, y: 0 }).unwrap();
+    app_state.window.set_cursor_grab(winit::window::CursorGrabMode::Confined).unwrap();
+    app_state.window.set_cursor_visible(false);
 
-        handle_events(&sdl, &mut state);
-        state.update(dt);
-        match state.render() {
-            Ok(_) => {}
-            Err(wgpu::SurfaceError::Lost) => {
-                let size = state.window.size();
-                state.resize(size.0 as i32, size.1 as i32);
+    app_state.window.set_inner_size(LogicalSize { width: 1600, height: 900 });
+    app_state.window.set_resizable(false);
+
+    let mut now = Instant::now();
+    event_loop.run(move |event, _, control_flow| match event {
+        Event::DeviceEvent { ref event, .. } => device_event(&mut app_state, event),
+        Event::WindowEvent { ref event, window_id } if window_id == app_state.window.id() => {
+            window_event(&mut app_state, event, control_flow)
+        }
+        Event::RedrawRequested(window_id) if window_id == app_state.window.id() => {
+            let dt = now.elapsed().as_secs_f64();
+            now = Instant::now();
+
+            app_state.update(dt);
+            match app_state.render() {
+                Ok(_) => {}
+                Err(wgpu::SurfaceError::Lost) => {
+                    let size = app_state.window.inner_size();
+                    app_state.resize(size.width, size.height);
+                }
+                Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
+                Err(e) => eprintln!("{:?}", e),
             }
-            Err(wgpu::SurfaceError::OutOfMemory) => std::process::exit(-1),
-            Err(e) => eprintln!("{:?}", e),
         }
-    }
+        Event::MainEventsCleared => app_state.window.request_redraw(),
+        _ => {}
+    });
 }
 
-fn handle_events(sdl: &sdl2::Sdl, state: &mut State) {
-    for event in sdl.event_pump().unwrap().poll_iter() {
-        match event {
-            Event::Quit { .. } | Event::KeyDown { keycode: Some(Keycode::Escape), .. } => std::process::exit(0),
-            Event::Window { win_event: WindowEvent::Resized(width, height), .. } => state.resize(width, height),
-            Event::MouseMotion { xrel, yrel, .. } => handle_mousemotion(xrel as f32, yrel as f32, state),
-            Event::KeyDown { keycode, .. } => handle_keydown(keycode.unwrap(), state),
-            Event::KeyUp { keycode, .. } => handle_keyup(keycode.unwrap(), state),
-            Event::MouseButtonDown { mouse_btn: MouseButton::Left, .. } => state.marker.should_cast = true,
-            Event::MouseButtonUp { mouse_btn: MouseButton::Left, .. } => state.marker.should_cast = false,
-            Event::MouseWheel { y, direction: MouseWheelDirection::Normal, .. } => handle_mousewheel(y, state),
-            _ => {}
+fn device_event(app_state: &mut State, event: &DeviceEvent) {
+    match &event {
+        DeviceEvent::MouseMotion { delta } => app_state.camera.offset_view(delta.0 as f32, delta.1 as f32),
+        DeviceEvent::MouseWheel { delta: MouseScrollDelta::LineDelta(_, y) } => {
+            let delta = y * 0.0005;
+            app_state.camera.ray_range = f32::clamp(app_state.camera.ray_range - delta, 0.1, 1.0);
         }
-    }
-}
-
-fn handle_mousewheel(y: i32, state: &mut State) {
-    state.camera.ray_range = f32::clamp(state.camera.ray_range + y as f32 * 0.1, 0.1, 1.0);
-}
-
-fn handle_mousemotion(xrel: f32, yrel: f32, state: &mut State) {
-    state.camera.offset_view(xrel, yrel);
-}
-
-fn handle_keydown(keycode: Keycode, state: &mut State) {
-    match keycode {
-        Keycode::W => state.camera.mov.forward = true,
-        Keycode::S => state.camera.mov.backward = true,
-        Keycode::D => state.camera.mov.right = true,
-        Keycode::A => state.camera.mov.left = true,
-        Keycode::Space => state.camera.mov.up = true,
-        Keycode::LShift => state.camera.mov.down = true,
         _ => {}
     }
 }
 
-fn handle_keyup(keycode: Keycode, state: &mut State) {
-    match keycode {
-        Keycode::W => state.camera.mov.forward = false,
-        Keycode::S => state.camera.mov.backward = false,
-        Keycode::D => state.camera.mov.right = false,
-        Keycode::A => state.camera.mov.left = false,
-        Keycode::Space => state.camera.mov.up = false,
-        Keycode::LShift => state.camera.mov.down = false,
+fn window_event(app_state: &mut State, event: &WindowEvent, control_flow: &mut ControlFlow) {
+    match event {
+        WindowEvent::CloseRequested
+        | WindowEvent::KeyboardInput {
+            input: KeyboardInput { state: ElementState::Pressed, virtual_keycode: Some(VirtualKeyCode::Escape), .. },
+            ..
+        } => *control_flow = ControlFlow::Exit,
+
+        WindowEvent::Resized(size) => app_state.resize(size.width, size.height),
+        WindowEvent::ScaleFactorChanged { new_inner_size: size, .. } => app_state.resize(size.width, size.height),
+
+        WindowEvent::MouseInput { state, button: MouseButton::Left, .. } => {
+            app_state.marker.should_cast = state == &ElementState::Pressed
+        }
+        WindowEvent::KeyboardInput { input: KeyboardInput { state, virtual_keycode, .. }, .. } => {
+            let val = state == &ElementState::Pressed;
+            if let Some(keycode) = virtual_keycode {
+                match keycode {
+                    VirtualKeyCode::W => app_state.camera.mov.forward = val,
+                    VirtualKeyCode::S => app_state.camera.mov.backward = val,
+                    VirtualKeyCode::A => app_state.camera.mov.left = val,
+                    VirtualKeyCode::D => app_state.camera.mov.right = val,
+                    VirtualKeyCode::Space => app_state.camera.mov.up = val,
+                    VirtualKeyCode::LShift => app_state.camera.mov.down = val,
+                    _ => {}
+                }
+            }
+        }
+
         _ => {}
     }
 }

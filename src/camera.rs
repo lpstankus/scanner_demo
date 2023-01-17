@@ -41,7 +41,7 @@ const PI: f32 = std::f32::consts::PI;
 const N_ITERATIONS: i32 = 5;
 
 const CAM_SIZE: f32 = 1.0;
-const CAM_SENSITIVITY: f32 = 0.001;
+const CAM_SENSITIVITY: f32 = 0.0005;
 const MOV_SPEED: f32 = 100.0;
 
 impl Camera {
